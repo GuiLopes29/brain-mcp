@@ -1,0 +1,43 @@
+{
+  "name": "mcp-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "start:api": "tsx src/api.ts",
+    "backup": "tsx src/backup.ts",
+    "restore": "tsx src/restore.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "classify:test": "tsx scripts/classify-test.ts",
+    "audit:brain": "tsx scripts/audit-existing.ts",
+    "consolidate": "tsx scripts/consolidate.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "better-sqlite3": "^11.10.0",
+    "chromadb": "^1.10.5",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^4.21.2",
+    "uuid": "^11.1.0",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.32",
+    "@types/uuid": "^10.0.0",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.9"
+  }
+}

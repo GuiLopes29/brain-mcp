@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.db
+*.db-shm
+*.db-wal
+data/
+.env
+
+# Local backup log — the portable export (backups/brain-export.json) IS versioned.
+backups/backup.log
+
+# audit:brain dry-run snapshots — local diagnostic artifacts, not meant to be versioned.
+backups/audit-report-*.json

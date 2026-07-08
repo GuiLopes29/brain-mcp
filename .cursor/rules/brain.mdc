@@ -1,0 +1,65 @@
+---
+description: Brain MCP — shared semantic memory (guardrails at task start + knowledge capture at the end)
+alwaysApply: true
+---
+
+# Brain MCP — Usage Rules
+
+## ⚡ Task start: load the guardrails (1 cheap call)
+
+BEFORE starting a coding task, call `get_guidelines({ project: "<project-name>", source: "cursor" })` **once**.
+It returns ≤12 short directives (learned rules and pitfalls) — hundreds of tokens, not thousands. Apply them to the work.
+
+Token-economy rules:
+- Call `get_guidelines` **only once** per task, never repeatedly.
+- Use `search_knowledge` only when you need detail on a specific solution the guardrails mentioned.
+
+## Automatic Knowledge Capture
+
+When wrapping up a development session where a problem was solved or a technical decision was made, automatically call `add_knowledge` with:
+
+- **title**: one-line summary of what was solved
+- **content**: full description — problem, root cause, solution applied, alternatives considered
+- **tags**: technologies and concepts involved
+- **project**: name of the repository or project in context
+- **source**: `"cursor"`
+- **problem**: original problem description
+- **kind**: `solution` | `rule` | `pitfall` | `decision`
+- **directive**: ONE imperative, actionable line capturing the lesson (required when `kind` is `rule` or `pitfall`)
+
+Do this without being asked. It's the system's memory.
+
+### Quality criteria — only write if at least one of these is true
+
+- The problem **wasn't obvious** (required real investigation to find the cause)
+- It cost **real time** (more than ~10 min of debugging or research)
+- It's a **decision another AI would repeat** without this context
+- It's a **pattern that will show up again** in the project
+
+**Don't write**: trivial fixes, typos, obvious language/framework behavior.
+
+### ⚠️ NEVER write to the Brain
+
+- Credentials, tokens, API keys, passwords, connection strings
+- PII of real users (names, emails, national IDs, customer data)
+- Code snippets with identifiable proprietary data from your employer/client
+- Any string that looks like a secret (patterns: `AKIA`, `-----BEGIN`, `eyJ`, `Bearer `, `sk-`)
+
+If the content to write contains any of these, omit it or replace it with `[REDACTED]`.
+
+## Source Attribution
+
+ALWAYS pass `source: "cursor"` on EVERY call to Brain tools — `add_knowledge`, `search_knowledge`, `update_knowledge`, `delete_knowledge`, `get_guidelines`. This feeds the traceability panel (Control Room).
+
+## Check before solving
+
+Before tackling a new problem, call `search_knowledge(source: "cursor")` to check whether a solution is already on record. Reuse knowledge instead of rediscovering it.
+
+## This repo's stack
+
+- Node.js + TypeScript (MCP server)
+- ChromaDB (vector DB, Docker :8000 — localhost only)
+- Ollama nomic-embed-text (embeddings, :11434)
+- SQLite better-sqlite3 (metadata)
+- React + Vite + TailwindCSS (Brain UI, :5173)
+- HTTP bridge: Express :3456 (localhost only)

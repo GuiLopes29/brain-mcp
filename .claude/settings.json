@@ -1,0 +1,28 @@
+{
+  "hooks": {
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pnpm --dir \"$CLAUDE_PROJECT_DIR/packages/mcp-server\" exec tsx scripts/auto-capture-hook.ts",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "pnpm --dir \"$CLAUDE_PROJECT_DIR/packages/mcp-server\" exec tsx scripts/inject-guidelines-hook.ts",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

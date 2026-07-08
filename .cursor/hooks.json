@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      { "command": "pnpm --dir \"packages/mcp-server\" exec tsx scripts/auto-capture-hook.ts" }
+    ],
+    "sessionStart": [
+      { "command": "pnpm --dir \"packages/mcp-server\" exec tsx scripts/inject-guidelines-hook.ts" }
+    ]
+  }
+}

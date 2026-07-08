@@ -1,0 +1,48 @@
+{
+  "name": "brain-mcp",
+  "version": "1.0.0",
+  "description": "Local-first semantic memory MCP server for Claude Code and Cursor — active guardrail injection, auto-capture, hybrid search, and knowledge consolidation, with zero recurring cost.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GuiLopes29/brain-mcp.git"
+  },
+  "author": "Guilherme Lopes (https://github.com/GuiLopes29)",
+  "license": "MIT",
+  "keywords": ["mcp", "model-context-protocol", "claude", "cursor", "ai-memory", "semantic-search", "knowledge-base", "rag"],
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
+  },
+  "dependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "scripts": {
+    "dev": "concurrently --names \"API,UI\" --prefix-colors \"cyan,magenta\" \"pnpm --filter mcp-server start:api\" \"pnpm --filter brain-ui dev\"",
+    "dev:server": "pnpm --filter mcp-server dev",
+    "dev:ui": "pnpm --filter brain-ui dev",
+    "build": "pnpm build:server && pnpm build:ui",
+    "build:server": "pnpm --filter mcp-server build",
+    "build:ui": "pnpm --filter brain-ui build",
+    "start:server": "pnpm --filter mcp-server start",
+    "start:api": "pnpm --filter mcp-server start:api",
+    "backup": "pnpm --filter mcp-server backup",
+    "restore": "pnpm --filter mcp-server restore",
+    "test": "pnpm --filter mcp-server test",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "sync:cursor-agents": "node scripts/sync-cursor-agents.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0"
+  }
+}

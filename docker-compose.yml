@@ -1,0 +1,17 @@
+services:
+  chromadb:
+    # Pinned to the version in production use — `latest` could silently jump a
+    # major version on the next pull and break the pinned chromadb@1.x npm client.
+    image: chromadb/chroma:1.0.0
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # Chroma 1.x persists to /data — mounting the legacy /chroma/chroma path
+      # leaves the real data in the container layer, silently lost on recreate.
+      - chroma_data:/data
+    environment:
+      - CHROMA_SERVER_AUTHN_CREDENTIALS_FILE=""
+      - ANONYMIZED_TELEMETRY=false
+    restart: unless-stopped
+volumes:
+  chroma_data:
