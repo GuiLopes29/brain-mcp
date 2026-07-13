@@ -41,9 +41,11 @@
     "backup": "pnpm --filter mcp-server backup",
     "restore": "pnpm --filter mcp-server restore",
     "test": "pnpm --filter mcp-server test",
-    "sync:cursor-agents": "node scripts/sync-cursor-agents.mjs"
+    "sync:cursor-agents": "node scripts/sync-cursor-agents.mjs",
+    "changeset": "changeset"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.0",
     "@types/node": "^22.20.0"
   }
 }

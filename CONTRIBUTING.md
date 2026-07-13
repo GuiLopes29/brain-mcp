@@ -20,7 +20,15 @@ See the [README](README.md) for the full architecture and troubleshooting.
 - New behavior in `add.ts`/`search.ts`/`services/*.ts` needs a matching test in `src/__tests__/` — see the existing files for the mocking pattern (`vi.mock` + `vi.stubGlobal('fetch', ...)` for the classifier).
 - If you add a new script under `scripts/`, make sure `tsconfig.json` still excludes `src/__tests__` from the build (avoids the silent test-duplication bug documented in the commit history).
 - Run `pnpm build:server` before manually testing against a real MCP client (Claude Code/Cursor) — they run the compiled `dist/`, not `src/` directly.
-- Behavior changes (not just typo/doc fixes) need a new entry in [CHANGELOG.md](CHANGELOG.md) — versioning is manual (semver + git tag) for now, no release automation yet.
+- Behavior changes (not just typo/doc fixes) need a changeset: run `pnpm changeset`, pick the bump type (patch/minor/major), and write a 1-2 line summary — it becomes a CHANGELOG.md entry automatically when the version is released (see `.changeset/README.md`).
+
+## Releasing a version
+
+Versioning is automated via [Changesets](https://github.com/changesets/changesets) (`.github/workflows/release.yml`):
+
+1. PRs with behavior changes include a changeset (`pnpm changeset`).
+2. On merge to `main`, the Action automatically opens/updates a "chore(release): version packages" PR with the version bump (`mcp-server` and `brain-ui` always together — `fixed` group in `.changeset/config.json`) and an updated `CHANGELOG.md`.
+3. Merging that release PR runs the Action again — since no changesets remain pending, it creates and pushes the matching git tag (`vX.Y.Z`) instead. No npm publish (packages are `private`).
 
 ## Platforms
 

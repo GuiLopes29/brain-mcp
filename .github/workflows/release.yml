@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  version-or-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # No npm publish — these are private, local-first packages. When there are
+      # pending changesets, this opens/updates a "Version Packages" PR (bumps
+      # package.json + writes one consolidated root CHANGELOG.md entry — see
+      # scripts/collect-changesets.mjs + finalize-release.mjs; per-package
+      # changelogs are disabled since this is one product, not independent
+      # libraries). Once that PR is merged, there are no changesets left, so the
+      # action instead runs `publish` — repurposed here to just create + push the
+      # matching git tag (`changeset tag`), skipping npm.
+      - name: Version packages or tag release
+        uses: changesets/action@v1
+        with:
+          version: node scripts/collect-changesets.mjs && pnpm changeset version && node scripts/finalize-release.mjs
+          publish: pnpm changeset tag
+          commit: "chore(release): version packages"
+          title: "chore(release): version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
