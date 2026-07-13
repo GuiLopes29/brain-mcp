@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { deleteKnowledge, logAccess } from '../services/sqlite.js';
-import { deleteEmbedding } from '../services/chroma.js';
+import { deleteEmbedding } from '../services/vectorStore.js';
 
 export const DeleteKnowledgeSchema = z.object({
   id: z.string().uuid(),

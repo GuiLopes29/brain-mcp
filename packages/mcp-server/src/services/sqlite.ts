@@ -1,10 +1,16 @@
 import '../env.js';
 import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { mkdirSync } from 'fs';
 import { createHash } from 'crypto';
 import type { KnowledgeItem } from '../types.js';
+
+/** Output dimension of the embedding model (nomic-embed-text). If this ever
+ * changes, existing rows in vec_knowledge must be dropped and re-embedded —
+ * vec0 columns have a fixed dimension. */
+export const EMBEDDING_DIM = 768;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -21,9 +27,9 @@ const DB_PATH = resolvePath();
 let db: Database.Database | null = null;
 
 /** Known event types written to access_log. */
-export type LogAction = 'add' | 'view' | 'search' | 'update' | 'delete' | 'guidelines';
+export type LogAction = 'add' | 'view' | 'search' | 'update' | 'delete' | 'guidelines' | 'list';
 
-function getDb(): Database.Database {
+export function getDb(): Database.Database {
   if (db) return db;
 
   mkdirSync(dirname(DB_PATH), { recursive: true });
@@ -35,6 +41,10 @@ function getDb(): Database.Database {
   conn.pragma('journal_mode = WAL');
   conn.pragma('foreign_keys = ON');
   conn.pragma('busy_timeout = 5000'); // wait on locks instead of throwing
+
+  // Vectors now live in this same file (vec_knowledge below) instead of a
+  // separate ChromaDB/Docker service — load the extension before any vec0 SQL runs.
+  sqliteVec.load(conn);
 
   conn.exec(`
     CREATE TABLE IF NOT EXISTS knowledge (
@@ -102,6 +112,32 @@ function getDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_log_knowledge ON access_log(knowledge_id);
     CREATE INDEX IF NOT EXISTS idx_log_source ON access_log(source);
     CREATE INDEX IF NOT EXISTS idx_log_action ON access_log(action);
+
+    -- Contradiction/near-duplicate warnings from add_knowledge (similarity >= 0.92).
+    -- Without this table, the warning only ever reached whoever's reading THAT one
+    -- add_knowledge response — lost forever for auto-capture writes nobody watches.
+    CREATE TABLE IF NOT EXISTS contradictions (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      new_id       TEXT NOT NULL,
+      similar_id   TEXT NOT NULL,
+      similarity   REAL NOT NULL,
+      status       TEXT NOT NULL DEFAULT 'pending',
+      created_at   TEXT NOT NULL,
+      reviewed_at  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_contradiction_status ON contradictions(status);
+    CREATE INDEX IF NOT EXISTS idx_contradiction_new ON contradictions(new_id);
+
+    -- Vector store (replaces ChromaDB/Docker — see services/vectorStore.ts). vec0
+    -- tables key by INTEGER rowid, not our TEXT UUIDs, so knowledge_vec_map bridges
+    -- the two — same pattern every sqlite-vec + external-metadata example uses.
+    CREATE VIRTUAL TABLE IF NOT EXISTS vec_knowledge USING vec0(
+      embedding float[${EMBEDDING_DIM}] distance_metric=cosine
+    );
+    CREATE TABLE IF NOT EXISTS knowledge_vec_map (
+      knowledge_id TEXT PRIMARY KEY,
+      vec_rowid    INTEGER UNIQUE NOT NULL
+    );
   `);
 
   migrate(conn);
@@ -216,6 +252,42 @@ export function logAccess(entry: {
   } catch {
     /* swallow — never break the caller */
   }
+}
+
+export interface ContradictionRow {
+  id: number;
+  new_id: string;
+  similar_id: string;
+  similarity: number;
+  status: string;
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+/** Record a contradiction/near-duplicate warning so it can be reviewed later instead of
+ * only ever reaching whoever's reading that one add_knowledge response. */
+export function insertContradiction(entry: { new_id: string; similar_id: string; similarity: number }): void {
+  const db = getDb();
+  db.prepare(
+    `INSERT INTO contradictions (new_id, similar_id, similarity, status, created_at)
+     VALUES (@new_id, @similar_id, @similarity, 'pending', @created_at)`,
+  ).run({ ...entry, created_at: new Date().toISOString() });
+}
+
+export function listContradictions(opts: { status?: string; limit?: number } = {}): ContradictionRow[] {
+  const db = getDb();
+  return db
+    .prepare(`SELECT * FROM contradictions WHERE status = @status ORDER BY created_at DESC LIMIT @limit`)
+    .all({ status: opts.status ?? 'pending', limit: opts.limit ?? 50 }) as ContradictionRow[];
+}
+
+/** Returns false if `id` doesn't exist or was already resolved (no-op, not an error). */
+export function resolveContradiction(id: number, status: 'reviewed' | 'dismissed'): boolean {
+  const db = getDb();
+  const result = db
+    .prepare(`UPDATE contradictions SET status = @status, reviewed_at = @reviewed_at WHERE id = @id AND status = 'pending'`)
+    .run({ id, status, reviewed_at: new Date().toISOString() });
+  return result.changes > 0;
 }
 
 export function insertKnowledge(item: KnowledgeItem): void {
@@ -476,7 +548,7 @@ export function listKnowledge(opts: {
 /** Test-only helper — clears all data from the in-memory DB. Never call in production. */
 export function _clearAllForTesting(): void {
   const db = getDb();
-  db.exec(`DELETE FROM knowledge_fts; DELETE FROM knowledge; DELETE FROM access_log;`);
+  db.exec(`DELETE FROM knowledge_fts; DELETE FROM knowledge; DELETE FROM access_log; DELETE FROM contradictions; DELETE FROM vec_knowledge; DELETE FROM knowledge_vec_map;`);
 }
 
 export function deleteKnowledge(id: string): boolean {

@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { KnowledgeItem } from '../types.js';
 
 vi.mock('../services/embeddings.js', () => ({ getEmbedding: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]) }));
-vi.mock('../services/chroma.js', () => ({ queryEmbeddings: vi.fn() }));
+vi.mock('../services/vectorStore.js', () => ({ queryEmbeddings: vi.fn() }));
 vi.mock('../services/sqlite.js', () => ({
   getKnowledgeRaw: vi.fn(),
   bumpAccess: vi.fn(),
@@ -19,7 +19,7 @@ vi.mock('../services/sqlite.js', () => ({
 }));
 
 import { searchKnowledge } from '../tools/search.js';
-import { queryEmbeddings } from '../services/chroma.js';
+import { queryEmbeddings } from '../services/vectorStore.js';
 import { getKnowledgeRaw, searchFts } from '../services/sqlite.js';
 
 const mockQueryEmbeddings = vi.mocked(queryEmbeddings);
@@ -50,7 +50,7 @@ beforeEach(() => {
 
 describe('searchKnowledge — project scoping', () => {
   it('does NOT leak results from other projects in via the keyword-match (FTS) path', async () => {
-    // Vector search correctly returns nothing for project "a" (as ChromaDB's `where` would enforce).
+    // Vector search correctly returns nothing for project "a" (no project-level filtering in the vector store itself).
     mockQueryEmbeddings.mockResolvedValue({ ids: [], distances: [] });
     // FTS has no project scoping — it returns a match from a DIFFERENT project ("b").
     mockSearchFts.mockReturnValue([{ id: 'leaked-id', bm25Score: -5 }]);

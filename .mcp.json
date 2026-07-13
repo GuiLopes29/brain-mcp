@@ -2,13 +2,7 @@
   "mcpServers": {
     "brain": {
       "command": "node",
-      "args": ["packages/mcp-server/dist/index.js"],
-      "env": {
-        "CHROMA_URL": "http://localhost:8000",
-        "CHROMA_COLLECTION": "brain_knowledge",
-        "OLLAMA_URL": "http://localhost:11434",
-        "OLLAMA_MODEL": "nomic-embed-text"
-      }
+      "args": ["packages/mcp-server/dist/index.js"]
     }
   }
 }

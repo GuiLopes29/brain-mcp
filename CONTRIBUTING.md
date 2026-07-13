@@ -7,10 +7,8 @@ Thanks for your interest! This is a personal open-source project — contributio
 ```bash
 cp .env.example .env
 pnpm install
-docker compose up -d         # ChromaDB
-ollama pull nomic-embed-text
 pnpm build:server
-pnpm test                    # 155+ tests, ~1s, no need for Docker/Ollama running (everything's mocked)
+pnpm test                    # 168+ tests, ~1s, no need for any external service (everything's mocked)
 pnpm dev                     # API + UI together
 ```
 

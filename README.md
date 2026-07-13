@@ -22,7 +22,8 @@ Every solution, decision, or lesson becomes a node searchable by natural languag
 - **Ebbinghaus decay** in guardrail ranking — knowledge reinforced by recurring use rises; what's no longer accessed decays (~14-day half-life).
 - **Full traceability**: who consumed what, when, and from where (claude / cursor / browser), with correct attribution even when the client forgets to report its own source.
 - **Interactive neural visualization**: a force-directed knowledge graph, with timeline, filters, and search.
-- **Durability**: automatic daily backup to GitHub (versioned JSON export) + restore with recovery from two disaster modes (SQLite lost, ChromaDB lost).
+- **Durability**: automatic daily backup to GitHub (versioned JSON export) + restore with full reconstruction (metadata + vectors) from scratch.
+- **100% embedded, no Docker and no local Ollama**: vectors live in the same SQLite file as the metadata (via `sqlite-vec`), and embeddings run in-process (via `@huggingface/transformers`) — there's no longer any external service (ChromaDB/Docker Desktop, local Ollama) to keep running.
 
 ---
 
@@ -34,10 +35,11 @@ Real numbers measured from the project's own usage, not estimates:
 |---|---|
 | Cost of `get_guidelines` vs. reading the full rule files | Hundreds of tokens vs. thousands — the return is just `[kind] directive` for up to 12 items |
 | Quality classifier calls per week | ~44-50, a residual fraction (~0.3%) of Ollama Cloud's free-tier quota (measured in GPU-time) |
-| Automated tests | 155+, whole suite runs in ~1s |
+| Automated tests | 168+, whole suite runs in ~1s |
 | Accumulated knowledge nodes (across 3 repos) | 45+ active (+ 12 consolidated into 4 generalized rules/pitfalls), growing organically without manual intervention |
 | `get_guidelines` calls before vs. after auto-injection | 3 calls in ~2 weeks of manual use → guaranteed on every message (Claude) / every new session (Cursor) via hooks |
 | Real bugs found in a self-audit | 6 confirmed and fixed in a single pass (a 1000x-wrong timeout, invalid model IDs, 2 race conditions, a project leak in search, a fragile disaster-recovery script) — no memory system "just works" without periodic auditing |
+| Heavy dependencies removed | 2 (Docker Desktop, local Ollama) — the vector store ran on ChromaDB via container (Docker on Windows allocates up to 50% of the machine's RAM to the WSL2 VM by default) and embeddings ran via local Ollama. Migrated to `sqlite-vec` + `@huggingface/transformers` (both embedded in the same Node process) — zero external services |
 
 ---
 
@@ -50,11 +52,11 @@ We researched how well-known AI agent memory systems solve the same problems bef
 | Automatic capture (hooks) | ✅ `SessionEnd`/`stop`, 2 clients | ✅ 12 hooks, 15+ clients | Partial (via marketplace) | ❌ (memory managed via tool calls) | ❌ |
 | Automatic guardrail injection (without the AI remembering to ask) | ✅ every message in Claude Code, every session in Cursor — the only pattern like this we found | ❌ | ❌ | ❌ | ❌ |
 | Quality classifier (2nd opinion before persisting) | ✅ with automatic model fallback | ❌ (compression, not a quality gate) | ❌ | ❌ | ❌ |
-| Hybrid search (vector + keyword) | ✅ FTS5 + ChromaDB, RRF | ✅ BM25 + vector + graph, RRF | ✅ vector + graph | Searchable (recall memory) | ✅ temporal knowledge graph |
+| Hybrid search (vector + keyword) | ✅ FTS5 + sqlite-vec, RRF | ✅ BM25 + vector + graph, RRF | ✅ vector + graph | Searchable (recall memory) | ✅ temporal knowledge graph |
 | Dedup with a real database guarantee (not just app-level) | ✅ UNIQUE index | Partial (5-min window by hash) | ADD-only (never overwrites) | N/A | N/A |
 | Decay/ranking by usage reinforcement | ✅ Ebbinghaus | 4 consolidation tiers (sleep curve) | Recency-based ranking | 3 tiers (core/recall/archival) | Versioned temporal graph |
-| Infrastructure cost | Free (local Ollama + SQLite + self-hosted ChromaDB); cloud classifier uses a residual fraction of the free tier | Free (local SQLite) | Paid SaaS | SaaS/self-host | Paid SaaS |
-| Hosting | 100% local | 100% local | Cloud | Cloud or self-host | Cloud |
+| Infrastructure cost | Free (embeddings + SQLite embedded in-process, no Docker, no local Ollama); cloud classifier uses a residual fraction of the free tier | Free (local SQLite) | Paid SaaS | SaaS/self-host | Paid SaaS |
+| Hosting | 100% local, no Docker, no separate services | 100% local | Cloud | Cloud or self-host | Cloud |
 | Retroactive quality audit | ✅ `audit:brain` (dry-run + apply) | ❌ | ❌ | ❌ | ❌ |
 | Consolidation of recurring knowledge (N loose solutions → 1 generalized rule) | ✅ `consolidate` (embedding clustering + model synthesis) | ❌ | ❌ | Partial (sleep-time consolidation, doesn't generate a new rule) | ❌ |
 | Cross-project knowledge (one lesson applies to any repo) | ✅ global tier (`project` optional) | ❌ (per session/agent) | ❌ (per user) | N/A (per-agent memory) | ❌ (per group/user) |
@@ -70,19 +72,21 @@ We researched how well-known AI agent memory systems solve the same problems bef
 ```
 packages/mcp-server/   Node + TypeScript — MCP server (stdio) + HTTP bridge (Express :3456)
 packages/brain-ui/     React + Vite + Tailwind — neural graph (:5173)
-ChromaDB               Vectors (Docker :8000)
-Ollama                 Local embeddings — nomic-embed-text (:11434)
-SQLite                 Metadata + access log (packages/mcp-server/data/brain.db)
+SQLite                 Metadata + vectors (sqlite-vec) + access log, all in packages/mcp-server/data/brain.db
 ```
 
 | Layer | Technology |
 |--------|-----------|
 | MCP Server | Node.js + TypeScript + `@modelcontextprotocol/sdk` |
-| Vector DB | ChromaDB (Docker) |
-| Embeddings | Ollama `nomic-embed-text` (local, no API key) |
+| Vector DB | `sqlite-vec` — embedded in the same SQLite file, no external service |
+| Embeddings | `@huggingface/transformers` (Transformers.js) — `nomic-embed-text-v1.5` running in-process (ONNX), no external service |
 | Metadata | SQLite (`better-sqlite3`, WAL) |
 | HTTP Bridge | Express :3456 |
 | UI | React + Vite + TailwindCSS + `react-force-graph-2d` |
+
+> **No Docker.** Until mid-July/2026 the vector store ran on ChromaDB via Docker Desktop — the heaviest piece of the stack (the WSL2 VM allocates up to 50% of the machine's RAM by default). We migrated to `sqlite-vec`, which runs embedded in the Node process — one less dependency, one less service that can go down on its own.
+>
+> **No local Ollama.** Embeddings used to run via local Ollama (`nomic-embed-text` on `:11434`) — one more service to keep alive. We migrated to `@huggingface/transformers`, which loads the same model (in ONNX) inside the Node process itself, with no exposed port and no separate service. (The quality classifier still uses Ollama Cloud — a remote API call, not a local service to keep running.)
 
 ---
 
@@ -90,17 +94,15 @@ SQLite                 Metadata + access log (packages/mcp-server/data/brain.db)
 
 ```bash
 cp .env.example .env         # 1. local config (OLLAMA_API_KEY is optional — without it, the classifier stays pending_review)
-pnpm install                 # 2. dependencies
-docker compose up -d         # 3. ChromaDB
-ollama pull nomic-embed-text # 4. embedding model (first time only)
-pnpm build:server            # 5. compiles the MCP server (generates dist/)
-pnpm dev                     # 6. brings up API + UI together
+pnpm install                 # 2. dependencies (downloads the embedding model on first use, via Transformers.js)
+pnpm build:server            # 3. compiles the MCP server (generates dist/)
+pnpm dev                     # 4. brings up API + UI together
 ```
 
 - UI: <http://localhost:5173>
 - API: <http://127.0.0.1:3456>
 
-> Prerequisites: Docker Desktop, [Ollama](https://ollama.com) running, Node **22+** (`.nvmrc`/`engines` in `package.json`), and pnpm.
+> Prerequisites: Node **22+** (`.nvmrc`/`engines` in `package.json`) and pnpm. **Docker and local Ollama are no longer required** (embeddings run embedded via Transformers.js; `OLLAMA_API_KEY` is only for the optional quality classifier, via Ollama Cloud).
 
 ---
 
@@ -211,7 +213,7 @@ pnpm audit:brain -- --apply   # applies the suggestions (review the report first
 
 `search_knowledge` fuses two relevance signals via **Reciprocal Rank Fusion** (k=60):
 
-1. **Vector search** (ChromaDB + Ollama embeddings) — captures semantic similarity.
+1. **Vector search** (`sqlite-vec` + embeddings via Transformers.js) — captures semantic similarity.
 2. **Keyword search** (SQLite FTS5, BM25 ranking) — captures exact matches that embeddings alone miss (e.g. `TIP-2375`, package names, acronyms).
 
 Items that rank well in both searches come out on top. The FTS5 index is kept up to date automatically by triggers on every `INSERT`/`UPDATE`/`DELETE` — no need to reindex manually.
@@ -422,8 +424,7 @@ Source is read from `?source=` or the `X-Brain-Source` header (the UI sends `bro
 | `pnpm build` | compiles server + UI |
 | `pnpm start:api` | HTTP bridge |
 | `pnpm backup` / `pnpm restore` | export+push / restore |
-| `pnpm docker:up` / `pnpm docker:down` | ChromaDB |
-| `pnpm test` | runs the test suite (155+ tests, ~1s) |
+| `pnpm test` | runs the test suite (168+ tests, ~1s) |
 | `pnpm test:watch` | watch mode for development |
 | `pnpm classify:test` | tests the classifier in isolation with 3 sample nodes |
 | `pnpm audit:brain` / `pnpm audit:brain -- --apply` | reclassifies existing nodes (dry-run / apply) |
@@ -459,7 +460,7 @@ pnpm sync:cursor-agents -- "C:/path/to/repo" [other-repo...]
 
 ## 🛡️ Security
 
-- ChromaDB and the HTTP bridge listen **only on `127.0.0.1`** — not exposed to the network.
+- The HTTP bridge listens **only on `127.0.0.1`** — not exposed to the network.
 - Every MCP tool input is validated with Zod (max lengths, restricted enums, non-empty tags).
 - Your own backup repo/mirror should be **private** if it holds anything sensitive.
 - `CLAUDE.md` and `.cursor/rules/brain.mdc` explicitly instruct **never to write** credentials, tokens, PII, or connection strings into the Brain.
@@ -496,14 +497,14 @@ If `pnpm rebuild` fails with `EBUSY`/`EPERM`, that's a sign a zombie process is 
 
 ## 🗺️ In progress / next steps
 
-Implemented and stable: full MCP tools, guardrail loop with Ebbinghaus ranking and deprecation, server-side quality classifier with automatic fallback, hybrid search (BM25 + vector) with per-project diversification, hash-based dedup with a real database constraint + contradiction detection, **auto-capture via `SessionEnd`/`stop` hooks** (Claude Code + Cursor), **auto-injection of guardrails via `UserPromptSubmit`/`sessionStart`** (Claude Code + Cursor), **cross-project global knowledge tier**, and **automatic consolidation of recurring solutions into generalized rules/pitfalls** (`pnpm consolidate`), hardened security, a test suite (155+), Control Room, node explorer, backup/restore with disaster recovery, and the full visualization layer.
+Implemented and stable: full MCP tools, guardrail loop with Ebbinghaus ranking and deprecation, server-side quality classifier with automatic fallback, hybrid search (BM25 + vector via `sqlite-vec`, **no Docker**) with per-project diversification, hash-based dedup with a real database constraint + contradiction detection, **auto-capture via `SessionEnd`/`stop` hooks** (Claude Code + Cursor), **auto-injection of guardrails via `UserPromptSubmit`/`sessionStart`** (Claude Code + Cursor), **cross-project global knowledge tier**, and **automatic consolidation of recurring solutions into generalized rules/pitfalls** (`pnpm consolidate`), hardened security, a test suite (168+), Control Room, node explorer, backup/restore with full reconstruction, and the full visualization layer.
 
 Deliberately deferred ideas (low cost/benefit today — open an issue when a real need shows up):
 
 - [ ] **Multi-machine sync** beyond git (current limitation: don't use on two machines at once without a manual `git pull` first). We evaluated moving to a hosted DB (Mongo Atlas free tier) — dropped for now: no serious self-hosted competitor (Letta/agentmemory) uses Mongo, and the migration would mean rewriting BM25 (FTS5 is SQLite-specific) without solving the real problem (public-backup scope).
 - [ ] **Neighbor highlighting** on hover / a graph minimap.
 - [ ] **Impact metrics** — a cheap proxy: count how often a consulted `pitfall` reappears as a tag on new `solution` nodes.
-- [ ] **Parallelizing restore** above ~100 nodes (sequential today; ChromaDB writes need to stay sequential, but `getEmbedding` calls could be batched).
+- [ ] **Parallelizing restore** above ~100 nodes (sequential today; SQLite writes are fast enough on their own, but `getEmbedding` calls (local inference via Transformers.js) could be batched).
 
 ### Known limitations
 

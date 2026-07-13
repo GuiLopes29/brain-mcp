@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { getEmbedding } from '../services/embeddings.js';
-import { storeEmbedding, deleteEmbedding } from '../services/chroma.js';
+import { storeEmbedding, deleteEmbedding } from '../services/vectorStore.js';
 import { updateKnowledge, getKnowledgeRaw, logAccess } from '../services/sqlite.js';
 
 export const UpdateKnowledgeSchema = z.object({
@@ -47,18 +47,7 @@ export async function updateKnowledgeTool(
     const textToEmbed = [title, content, tags.join(' ')].join('\n');
     const embedding = await getEmbedding(textToEmbed);
     await deleteEmbedding(parsed.id).catch(() => {});
-    await storeEmbedding(
-      parsed.id,
-      embedding,
-      {
-        title,
-        project: existing.project,
-        tags: tags.join(','),
-        source: existing.source,
-        created_at: existing.created_at,
-      },
-      textToEmbed,
-    );
+    await storeEmbedding(parsed.id, embedding);
   }
 
   updateKnowledge(parsed.id, {

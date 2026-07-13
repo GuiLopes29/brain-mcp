@@ -5,8 +5,8 @@
  * nearly the same time. The DB's UNIQUE index on content_hash is what
  * actually catches it — this test verifies addKnowledge degrades that into
  * the same graceful "duplicate detected" response instead of throwing, and
- * cleans up the embedding it had already written to Chroma before the
- * conflict was discovered.
+ * cleans up the embedding it had already written to the vector store before
+ * the conflict was discovered.
  *
  * Mocks sqlite.js directly (unlike add-classifier.test.ts, which uses the
  * real in-memory DB) because simulating a genuine cross-process race
@@ -35,7 +35,7 @@ const RACE_WINNER: KnowledgeItem = {
 // import) rather than referenced from a top-level const declared below.
 vi.mock('../services/classifier.js', () => ({ classifyKnowledge: vi.fn().mockResolvedValue(null) }));
 vi.mock('../services/embeddings.js', () => ({ getEmbedding: vi.fn().mockResolvedValue(new Array(8).fill(0.1)) }));
-vi.mock('../services/chroma.js', () => ({
+vi.mock('../services/vectorStore.js', () => ({
   storeEmbedding: vi.fn().mockResolvedValue(undefined),
   queryEmbeddings: vi.fn().mockResolvedValue({ ids: [], distances: [] }),
   deleteEmbedding: vi.fn().mockResolvedValue(undefined),
@@ -45,10 +45,11 @@ vi.mock('../services/sqlite.js', () => ({
   insertKnowledge: vi.fn(),
   getKnowledgeRaw: vi.fn(),
   logAccess: vi.fn(),
+  insertContradiction: vi.fn(),
 }));
 
 import { addKnowledge } from '../tools/add.js';
-import { deleteEmbedding } from '../services/chroma.js';
+import { deleteEmbedding } from '../services/vectorStore.js';
 import { findByContentHash, insertKnowledge } from '../services/sqlite.js';
 
 const mockFindByContentHash = vi.mocked(findByContentHash);
@@ -78,7 +79,7 @@ describe('addKnowledge — insert-time UNIQUE constraint race', () => {
     expect(res.message).toContain('Race winner');
   });
 
-  it('cleans up the orphaned Chroma embedding written before the conflict was discovered', async () => {
+  it('cleans up the orphaned vector-store embedding written before the conflict was discovered', async () => {
     mockFindByContentHash.mockReturnValueOnce(undefined).mockReturnValueOnce(RACE_WINNER);
     mockInsertKnowledge.mockImplementation(() => {
       throw new Error('UNIQUE constraint failed: knowledge.content_hash');

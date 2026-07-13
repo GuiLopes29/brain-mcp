@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { getEmbedding, warmUp } from './services/embeddings.js';
-import { storeEmbedding, getExistingIds } from './services/chroma.js';
+import { storeEmbedding, getExistingIds } from './services/vectorStore.js';
 import { insertKnowledge, getKnowledgeRaw, getAllKnowledge } from './services/sqlite.js';
 import type { KnowledgeItem } from './types.js';
 
@@ -25,31 +25,23 @@ interface ExportFile {
 async function embedAndStore(item: KnowledgeItem): Promise<void> {
   const textToEmbed = [item.title, item.content, item.tags.join(' ')].join('\n');
   const embedding = await getEmbedding(textToEmbed);
-  await storeEmbedding(
-    item.id,
-    embedding,
-    {
-      title: item.title,
-      project: item.project,
-      tags: item.tags.join(','),
-      source: item.source,
-      created_at: item.created_at,
-    },
-    textToEmbed,
-  );
+  await storeEmbedding(item.id, embedding);
 }
 
 /**
- * Restore knowledge into SQLite + ChromaDB. Handles BOTH disaster modes:
+ * Restore knowledge from the JSON backup into brain.db — both the `knowledge`
+ * table and its vectors (vec_knowledge) live in that same SQLite file now, so
+ * "lost the DB" is a single disaster mode, not two separate stores to reconcile:
  *
- * 1. SQLite lost → rows missing from brain.db are re-inserted from the JSON
- *    backup (and embedded into Chroma).
- * 2. ChromaDB lost (e.g. container recreated with data in the wrong volume
- *    path) → SQLite rows whose embeddings are missing from Chroma are
- *    re-embedded, with SQLite as the source of truth (it may be newer than
- *    the JSON backup).
+ * 1. Rows missing from `knowledge` are re-inserted from the JSON backup (which
+ *    has no embeddings — only metadata).
+ * 2. Any row whose vector is missing (every row, on a fresh DB; or just the
+ *    gap, if `knowledge` survived but vectors didn't for some other reason)
+ *    gets re-embedded, with `knowledge` as the source of truth — it may
+ *    contain items newer than the JSON backup (e.g. added after the last
+ *    daily export).
  *
- * Idempotent: items already present in both stores are skipped.
+ * Idempotent: items already present (row + vector) are skipped.
  */
 async function main(): Promise<void> {
   const path = process.argv[2] ?? EXPORT_FILE;
@@ -84,13 +76,11 @@ async function main(): Promise<void> {
     }
   }
 
-  // ── Phase 2: SQLite → ChromaDB (embeddings missing from the vector store) ──
-  // SQLite is the source of truth here — it may contain items newer than the
-  // JSON backup (e.g. added after the last daily export).
+  // ── Phase 2: rebuild any missing vectors (knowledge table is the source of truth) ──
   const all = getAllKnowledge();
   const present = await getExistingIds(all.map((i) => i.id));
   const missing = all.filter((i) => !present.has(i.id));
-  log(`chroma: ${present.size}/${all.length} embeddings present, ${missing.length} to rebuild`);
+  log(`vectors: ${present.size}/${all.length} present, ${missing.length} to rebuild`);
 
   let embedded = 0;
   for (const item of missing) {
@@ -104,8 +94,9 @@ async function main(): Promise<void> {
   const totalElapsed = ((Date.now() - t0) / 1000).toFixed(1);
   log(`done — ${inserted} SQLite row(s) restored, ${skipped} skipped (conflict), ${embedded} embedding(s) rebuilt — total ${totalElapsed}s`);
   // NOTE: sequential embedding is fine up to ~100 nodes (~30s). Beyond that,
-  // consider batching or parallelising the getEmbedding calls (ChromaDB writes
-  // must remain sequential to avoid race conditions on the collection).
+  // consider batching/parallelising the getEmbedding calls themselves — the
+  // actual SQLite writes are already fast and don't need the same care Chroma's
+  // HTTP API once did.
   process.exit(0);
 }
 

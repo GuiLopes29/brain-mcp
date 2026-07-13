@@ -5,7 +5,7 @@
  * when a script is launched with cwd=packages/mcp-server (e.g. `pnpm start:api`
  * run from that workspace), it silently finds nothing there (.env only lives
  * at the repo root) and every var falls back to its in-code default. That
- * masks the problem for vars with defaults (OLLAMA_URL, CHROMA_URL) but not
+ * masks the problem for vars with defaults (SQLITE_PATH, API_PORT) but not
  * for ones without (OLLAMA_API_KEY) — which fail with no error, just silently
  * missing.
  *

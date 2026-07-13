@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { getEmbedding } from '../services/embeddings.js';
-import { queryEmbeddings } from '../services/chroma.js';
+import { queryEmbeddings } from '../services/vectorStore.js';
 import { getKnowledgeRaw, bumpAccess, isLLMSource, logAccess, searchFts } from '../services/sqlite.js';
 import type { KnowledgeSearchResult } from '../types.js';
 
@@ -31,21 +31,21 @@ export async function searchKnowledge(input: SearchKnowledgeInput): Promise<{ re
 
   let embedding: number[];
   try {
-    embedding = await getEmbedding(parsed.query);
+    embedding = await getEmbedding(parsed.query, 'query');
   } catch (err) {
-    throw new Error(`Ollama unreachable — ensure "ollama serve" is running (${String(err)})`);
+    throw new Error(`Embedding generation failed (${String(err)})`);
   }
 
-  // ── Vector search (ChromaDB) ─────────────────────────────────────────────────
-  // No project filter at the Chroma level — a project filter must also admit
-  // global (project='') items, and Chroma's `where` here only supports exact
-  // match. Dataset is small enough that post-filtering below (line ~74) is cheap
-  // and keeps this simple, matching getGuidelines()'s SQL-side `project = ''` rule.
-  const chromaLimit = Math.min(parsed.limit * 3, 50);
-  const { ids: vectorIds, distances } = await queryEmbeddings(embedding, chromaLimit, {});
+  // ── Vector search (sqlite-vec) ───────────────────────────────────────────────
+  // No project filter pushed into the vector query — a project filter must also
+  // admit global (project='') items, so post-filtering below (line ~74) is what
+  // does that, matching getGuidelines()'s SQL-side `project = ''` rule. Simple,
+  // and cheap at this dataset size.
+  const vectorLimit = Math.min(parsed.limit * 3, 50);
+  const { ids: vectorIds, distances } = await queryEmbeddings(embedding, vectorLimit);
 
   // ── BM25 keyword search (SQLite FTS5) ────────────────────────────────────────
-  const ftsHits = searchFts(parsed.query, chromaLimit);
+  const ftsHits = searchFts(parsed.query, vectorLimit);
 
   // ── Reciprocal Rank Fusion ────────────────────────────────────────────────────
   const vectorRankMap = new Map(vectorIds.map((id, i) => [id, i]));

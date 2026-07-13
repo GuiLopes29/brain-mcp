@@ -58,8 +58,8 @@ Before tackling a new problem, call `search_knowledge(source: "cursor")` to chec
 ## This repo's stack
 
 - Node.js + TypeScript (MCP server)
-- ChromaDB (vector DB, Docker :8000 — localhost only)
-- Ollama nomic-embed-text (embeddings, :11434)
+- sqlite-vec (vector DB, embedded in the same SQLite file — no Docker)
+- @huggingface/transformers (embeddings, `nomic-embed-text-v1.5`, in-process — no local Ollama)
 - SQLite better-sqlite3 (metadata)
 - React + Vite + TailwindCSS (Brain UI, :5173)
 - HTTP bridge: Express :3456 (localhost only)

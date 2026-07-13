@@ -20,7 +20,10 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "better-sqlite3",
-      "esbuild"
+      "esbuild",
+      "onnxruntime-node",
+      "protobufjs",
+      "sharp"
     ]
   },
   "dependencies": {
@@ -38,8 +41,6 @@
     "backup": "pnpm --filter mcp-server backup",
     "restore": "pnpm --filter mcp-server restore",
     "test": "pnpm --filter mcp-server test",
-    "docker:up": "docker compose up -d",
-    "docker:down": "docker compose down",
     "sync:cursor-agents": "node scripts/sync-cursor-agents.mjs"
   },
   "devDependencies": {

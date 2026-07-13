@@ -2,8 +2,8 @@ import { createHash } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { getEmbedding } from '../services/embeddings.js';
-import { storeEmbedding, queryEmbeddings, deleteEmbedding } from '../services/chroma.js';
-import { insertKnowledge, logAccess, findByContentHash, getKnowledgeRaw } from '../services/sqlite.js';
+import { storeEmbedding, queryEmbeddings, deleteEmbedding } from '../services/vectorStore.js';
+import { insertKnowledge, logAccess, findByContentHash, getKnowledgeRaw, insertContradiction } from '../services/sqlite.js';
 import { classifyKnowledge } from '../services/classifier.js';
 import type { KnowledgeReviewStatus } from '../types.js';
 
@@ -91,32 +91,32 @@ export async function addKnowledge(
   try {
     embedding = await getEmbedding(textToEmbed);
   } catch (err) {
-    throw new Error(`Ollama unreachable — ensure "ollama serve" is running (${String(err)})`);
+    throw new Error(`Embedding generation failed (${String(err)})`);
   }
 
   // ── 4. Contradiction detection ───────────────────────────────────────────────
   // Non-blocking: warn if a very similar node already exists (semantic near-duplicate)
   let similarTo: { id: string; title: string } | undefined;
+  let similarToScore = 0;
   try {
-    const { ids: nearIds, distances: nearDist } = await queryEmbeddings(embedding, 1, {});
-    if (nearIds.length > 0 && (1 - (nearDist[0] ?? 1)) >= SIMILARITY_THRESHOLD) {
+    const { ids: nearIds, distances: nearDist } = await queryEmbeddings(embedding, 1);
+    const score = 1 - (nearDist[0] ?? 1);
+    if (nearIds.length > 0 && score >= SIMILARITY_THRESHOLD) {
       const near = getKnowledgeRaw(nearIds[0]);
-      if (near) similarTo = { id: near.id, title: near.title };
+      if (near) {
+        similarTo = { id: near.id, title: near.title };
+        similarToScore = score;
+      }
     }
   } catch {
-    // Non-fatal — skip the check if ChromaDB is unavailable
+    // Non-fatal — skip the check if the vector store errors for any reason
   }
 
   // ── 5. Persist ───────────────────────────────────────────────────────────────
   const id = uuidv4();
   const created_at = new Date().toISOString();
 
-  await storeEmbedding(
-    id,
-    embedding,
-    { title: parsed.title, project: parsed.project, tags: parsed.tags.join(','), source: parsed.source, created_at },
-    textToEmbed,
-  );
+  await storeEmbedding(id, embedding);
 
   try {
     insertKnowledge({
@@ -139,8 +139,8 @@ export async function addKnowledge(
     // Race: another process (a second MCP server, the HTTP bridge, an auto-capture worker)
     // inserted the identical content between our pre-check above and this insert — the
     // UNIQUE index on content_hash is what actually catches it now, the pre-check is just
-    // the fast path. Clean up the orphaned Chroma embedding we just wrote for this `id`
-    // (SQLite never got a matching row) and fall back to the same duplicate response shape.
+    // the fast path. Clean up the orphaned vector row we just wrote for this `id`
+    // (the knowledge table never got a matching row) and fall back to the same duplicate response shape.
     if (String(err).includes('UNIQUE constraint failed') && String(err).includes('content_hash')) {
       await deleteEmbedding(id).catch(() => {});
       const raceWinner = findByContentHash(hash);
@@ -160,6 +160,13 @@ export async function addKnowledge(
   }
 
   logAccess({ knowledge_id: id, action: 'add', source: parsed.source, project: parsed.project });
+
+  // Persist the contradiction warning — otherwise it only ever reaches whoever's looking
+  // at THIS response, and is lost forever the moment auto-capture (no human watching) is
+  // the caller. list_contradictions/resolve_contradiction make it reviewable later.
+  if (similarTo) {
+    insertContradiction({ new_id: id, similar_id: similarTo.id, similarity: similarToScore });
+  }
 
   const classifierNote = classification
     ? ` [auto_classified: ${classification.suggested_kind}, priority=${finalPriority}]`

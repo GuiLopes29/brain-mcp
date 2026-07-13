@@ -7,27 +7,18 @@ Semantic memory server for Claude and Cursor. Stores knowledge, decisions, and l
 ```
 packages/mcp-server/   — Node.js MCP server (stdio) + HTTP bridge (Express :3456)
 packages/brain-ui/     — React + Vite UI (force-directed knowledge graph, :5173)
-ChromaDB               — Vector store (Docker :8000)
-Ollama                 — Local embeddings (nomic-embed-text, :11434)
-SQLite                 — Metadata store (packages/mcp-server/data/brain.db)
+SQLite                 — Metadata + vectors (sqlite-vec), packages/mcp-server/data/brain.db
 ```
+
+No Docker, no local Ollama — vectors live in the same SQLite file as everything else via `sqlite-vec`, and embeddings run in-process via `@huggingface/transformers` (Transformers.js).
 
 ## Starting the stack
 
 ```bash
-# 1. Start ChromaDB
-docker compose up -d
-
-# 2. Start Ollama (if not already running as a service)
-ollama serve
-
-# 3. Pull embedding model (first time only)
-ollama pull nomic-embed-text
-
-# 4. Start HTTP bridge (for the UI)
+# 1. Start HTTP bridge (for the UI) — first run downloads the embedding model (ONNX, cached locally)
 pnpm start:api      # http://127.0.0.1:3456
 
-# 5. Start UI (optional)
+# 2. Start UI (optional)
 pnpm dev:ui         # http://localhost:5173
 ```
 

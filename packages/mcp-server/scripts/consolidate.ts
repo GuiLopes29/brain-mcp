@@ -16,7 +16,7 @@ import '../src/env.js';
 import { createHash } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { getEmbedding } from '../src/services/embeddings.js';
-import { storeEmbedding } from '../src/services/chroma.js';
+import { storeEmbedding } from '../src/services/vectorStore.js';
 import { listKnowledge, insertKnowledge, updateKnowledge } from '../src/services/sqlite.js';
 import { synthesizeConsolidation } from '../src/services/classifier.js';
 import { clusterBySimilarity } from '../src/services/clustering.js';
@@ -88,7 +88,7 @@ async function main(): Promise<void> {
     const textToEmbed = [title, content, tags.join(' ')].join('\n');
 
     const embedding = await getEmbedding(textToEmbed);
-    await storeEmbedding(id, embedding, { title, project, tags: tags.join(','), source: 'claude', created_at: now }, textToEmbed);
+    await storeEmbedding(id, embedding);
 
     insertKnowledge({
       id, title, content, tags, project,

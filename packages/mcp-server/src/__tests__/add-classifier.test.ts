@@ -1,6 +1,6 @@
 /**
  * Integration tests for the add_knowledge ↔ classifier pipeline.
- * Mocks classifier, embeddings, and ChromaDB so no network I/O happens.
+ * Mocks classifier, embeddings, and the vector store so no network I/O happens.
  * SQLite uses the in-memory DB from setup.ts (pool: 'forks').
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -9,7 +9,7 @@ import type { ClassificationResult } from '../services/classifier.js';
 // Hoisted mocks — vitest lifts vi.mock() above imports in ESM
 vi.mock('../services/classifier.js', () => ({ classifyKnowledge: vi.fn() }));
 vi.mock('../services/embeddings.js', () => ({ getEmbedding: vi.fn() }));
-vi.mock('../services/chroma.js', () => ({
+vi.mock('../services/vectorStore.js', () => ({
   storeEmbedding: vi.fn(),
   // Default: no near-duplicates found — individual tests override as needed
   queryEmbeddings: vi.fn().mockResolvedValue({ ids: [], distances: [] }),
@@ -18,7 +18,7 @@ vi.mock('../services/chroma.js', () => ({
 import { addKnowledge } from '../tools/add.js';
 import { classifyKnowledge } from '../services/classifier.js';
 import { getEmbedding } from '../services/embeddings.js';
-import { storeEmbedding, queryEmbeddings } from '../services/chroma.js';
+import { storeEmbedding, queryEmbeddings } from '../services/vectorStore.js';
 import { getKnowledgeRaw, _clearAllForTesting } from '../services/sqlite.js';
 
 const mockClassify = vi.mocked(classifyKnowledge);
@@ -149,12 +149,12 @@ describe('when classifier returns null', () => {
 
 // ── Embedding failure ───────────────────────────────────────────────────────
 
-describe('when Ollama is unreachable', () => {
+describe('when embedding generation fails', () => {
   it('throws a descriptive error and does not persist', async () => {
     mockClassify.mockResolvedValue(makeClassification());
-    mockEmbed.mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:11434'));
+    mockEmbed.mockRejectedValue(new Error('model load failed'));
 
-    await expect(addKnowledge(BASE_INPUT)).rejects.toThrow(/Ollama unreachable/);
+    await expect(addKnowledge(BASE_INPUT)).rejects.toThrow(/Embedding generation failed/);
   });
 });
 
@@ -263,10 +263,10 @@ describe('global project tier', () => {
 // ── Contradiction detection ─────────────────────────────────────────────────
 
 describe('contradiction detection', () => {
-  it('includes similar_to when ChromaDB returns a very close match', async () => {
+  it('includes similar_to when the vector store returns a very close match', async () => {
     mockClassify.mockResolvedValue(makeClassification());
 
-    // First node already exists in ChromaDB (simulated)
+    // First node already exists in the vector store (simulated)
     mockQuery.mockResolvedValueOnce({ ids: ['existing-id-abc'], distances: [0.05] }); // 1-0.05 = 0.95 > 0.92
 
     // Manually insert a "pre-existing" node so getKnowledgeRaw('existing-id-abc') returns it
@@ -291,6 +291,14 @@ describe('contradiction detection', () => {
 
     expect(res.similar_to).toEqual({ id: 'existing-id-abc', title: 'Very similar node' });
     expect(res.message).toContain('Similar node already exists');
+
+    // The warning must survive beyond this one response — otherwise it's lost
+    // forever for auto-capture writes nobody's watching.
+    const { listContradictions } = await import('../services/sqlite.js');
+    const rows = listContradictions();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ new_id: res.id, similar_id: 'existing-id-abc' });
+    expect(rows[0].similarity).toBeCloseTo(0.95);
   });
 
   it('does not set similar_to when similarity is below threshold', async () => {
@@ -302,11 +310,11 @@ describe('contradiction detection', () => {
     expect(res.similar_to).toBeUndefined();
   });
 
-  it('still stores the node when ChromaDB query fails', async () => {
+  it('still stores the node when the vector store query fails', async () => {
     mockClassify.mockResolvedValue(makeClassification());
-    mockQuery.mockRejectedValueOnce(new Error('ChromaDB unavailable'));
+    mockQuery.mockRejectedValueOnce(new Error('vector store unavailable'));
 
-    const res = await addKnowledge({ ...BASE_INPUT, content: 'Content when chroma is down' });
+    const res = await addKnowledge({ ...BASE_INPUT, content: 'Content when the vector store is down' });
 
     expect(res.id).toBeDefined();
     expect(res.similar_to).toBeUndefined(); // gracefully skipped
