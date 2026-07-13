@@ -2,6 +2,7 @@
 
 [![Test](https://github.com/GuiLopes29/brain-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/GuiLopes29/brain-mcp/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
 
 **Active** semantic memory for Claude and Cursor. Not just a knowledge store: it **reinforces good practices, prevents recurring mistakes, and improves code quality/security** for the AIs that use it — with **controlled token cost**, and without depending on the AI "remembering" to read or write.
 
@@ -9,7 +10,7 @@ Every solution, decision, or lesson becomes a node searchable by natural languag
 
 ### Index
 
-[What Brain does](#-what-brain-does) · [Measurable gains](#-measurable-gains) · [Comparison with other solutions](#-comparison-with-other-solutions) · [Architecture](#-architecture) · [Quick start](#-quick-start) · [MCP Tools](#️-mcp-tools) · [Classifier](#-quality-classifier-ollama-cloud) · [Hybrid search](#-hybrid-search-vector--bm25) · [Dedup/contradiction](#-deduplication-and-contradiction-detection) · [Active loop + auto-injection + auto-capture](#-the-active-improvement-loop-with-token-control) · [Control Room](#-control-room-admin-panel) · [Brain UI](#-brain-ui--features) · [Backup](#-backup--restore) · [Live log](#-live-log) · [Scripts](#-scripts) · [Integration](#-integration) · [Security](#️-security) · [Troubleshooting](#-troubleshooting) · [Roadmap](#️-in-progress--next-steps)
+[What Brain does](#-what-brain-does) · [Measurable gains](#-measurable-gains) · [Comparison with other solutions](#-comparison-with-other-solutions) · [Architecture](#-architecture) · [Quick start](#-quick-start) · [MCP Tools](#️-mcp-tools) · [Classifier](#-quality-classifier-ollama-cloud) · [Hybrid search](#-hybrid-search-vector--bm25) · [Dedup/contradiction](#-deduplication-and-contradiction-detection) · [Active loop + auto-injection + auto-capture](#-the-active-improvement-loop-with-token-control) · [Control Room](#-control-room-admin-panel) · [Brain UI](#-brain-ui--features) · [Backup](#-backup--restore) · [Live log](#-live-log) · [Scripts](#-scripts) · [Integration](#-integration) · [Security](#️-security) · [Troubleshooting](#-troubleshooting) · [Roadmap](#️-in-progress--next-steps) · [Changelog](CHANGELOG.md)
 
 ---
 

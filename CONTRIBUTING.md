@@ -20,6 +20,7 @@ See the [README](README.md) for the full architecture and troubleshooting.
 - New behavior in `add.ts`/`search.ts`/`services/*.ts` needs a matching test in `src/__tests__/` — see the existing files for the mocking pattern (`vi.mock` + `vi.stubGlobal('fetch', ...)` for the classifier).
 - If you add a new script under `scripts/`, make sure `tsconfig.json` still excludes `src/__tests__` from the build (avoids the silent test-duplication bug documented in the commit history).
 - Run `pnpm build:server` before manually testing against a real MCP client (Claude Code/Cursor) — they run the compiled `dist/`, not `src/` directly.
+- Behavior changes (not just typo/doc fixes) need a new entry in [CHANGELOG.md](CHANGELOG.md) — versioning is manual (semver + git tag) for now, no release automation yet.
 
 ## Platforms
 
