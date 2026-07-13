@@ -1,6 +1,6 @@
 {
   "name": "brain-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Local-first semantic memory MCP server for Claude Code and Cursor — active guardrail injection, auto-capture, hybrid search, and knowledge consolidation, with zero recurring cost.",
   "repository": {
     "type": "git",
